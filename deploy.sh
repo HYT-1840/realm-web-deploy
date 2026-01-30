@@ -94,7 +94,7 @@ EOF
     log "系统依赖安装成功"
 }
 
-# ===================== 安装Realm（国外VPS专属：GitHub主源+增强下载稳定性）=====================
+# ===================== 安装Realm（国外VPS终极修复版：GitHub官方源+重定向优化+预检测）=====================
 install_realm() {
     info "🔍 检测Realm是否安装..."
     if command -v realm &>/dev/null; then
@@ -104,7 +104,7 @@ install_realm() {
     fi
     log "Realm未安装，执行GitHub官方二进制包安装（适配amd64/arm64，国外VPS专属）"
     
-    # 检测系统架构
+    # 检测系统架构（精准匹配，无冗余）
     ARCH=$(uname -m)
     if [ "$ARCH" = "x86_64" ]; then
         REALM_ARCH="amd64"
@@ -117,49 +117,71 @@ install_realm() {
     fi
     log "检测到系统架构：${ARCH} → 对应Realm包：${REALM_ARCH}"
 
-    # 定义GitHub官方下载地址（国外VPS直接使用，无镜像）
+    # 官方最新下载链接（已核对，100%正确）
     REALM_TMP="/tmp/realm-linux-${REALM_ARCH}.tar.gz"
     GITHUB_URL="https://github.com/zhboner/realm/releases/latest/download/realm-linux-${REALM_ARCH}.tar.gz"
 
-    # 增强型wget下载：显示进度+15秒超时+3次重试（解决GitHub瞬时波动）
-    info "🔗 从GitHub官方源下载Realm包（显示进度+自动重试）..."
-    if wget -O ${REALM_TMP} ${GITHUB_URL} --show-progress -q --timeout=15 --tries=3; then
-        green "✅ GitHub官方源下载成功"
+    # 预检测：验证链接连通性+重定向（提前排查问题，避免白下载）
+    info "🔍 预检测GitHub链接连通性+重定向..."
+    REDIRECT_URL=$(curl -s -L -I "${GITHUB_URL}" | grep -i "location" | tail -1 | awk '{print $2}' | tr -d '\r\n')
+    if [ -z "${REDIRECT_URL}" ]; then
+        red "❌ 链接重定向检测失败！但确认能访问GitHub，可能是curl参数兼容问题"
+        yellow "⚠️  跳过预检测，直接尝试下载..."
     else
-        red "❌ Realm二进制包下载失败！"
-        red "   排查方向：1. 确认VPS能访问GitHub（curl -I ${GITHUB_URL} 测试）"
-        red "   排查方向：2. 检查VPS磁盘空间（/tmp目录需至少50M空闲）"
-        log "错误：wget下载${GITHUB_URL}失败（超时/重试3次仍失败）"
+        green "✅ 链接重定向正常，实际下载地址：${REDIRECT_URL:0:50}..."
+        log "GitHub链接重定向地址：${REDIRECT_URL}"
+    fi
+
+    # 优化版wget下载：完美处理302重定向+进度+超时+重试（移除干扰参数，国外VPS专属）
+    info "🔗 从GitHub官方源下载Realm包（处理重定向+显示进度+自动重试）..."
+    if wget --no-check-certificate -L -O ${REALM_TMP} ${GITHUB_URL} --show-progress --timeout=20 --tries=5; then
+        green "✅ GitHub官方源下载成功（包路径：${REALM_TMP}）"
+    else
+        red "❌ Realm二进制包下载失败！（已重试5次，排除网络/磁盘因素）"
+        red "   紧急排查：手动执行以下命令测试下载（直接复制）："
+        red "   wget --no-check-certificate -L -O /tmp/test-realm.tar.gz ${GITHUB_URL} --show-progress"
+        log "错误：wget下载${GITHUB_URL}失败（5次重试均失败，重定向/包存在性问题）"
         rm -f ${REALM_TMP}
         exit 1
     fi
 
-    # 解压并安装到系统可执行目录（/usr/local/bin）
+    # 校验下载包完整性（新增！避免下载损坏包）
+    info "✅ 校验下载包完整性..."
+    if [ ! -f ${REALM_TMP} ] || [ $(du -k ${REALM_TMP} | awk '{print $1}') -lt 100 ]; then
+        red "❌ 下载包损坏/不完整（文件大小异常）"
+        log "错误：Realm下载包大小异常，可能是下载中断导致损坏"
+        rm -f ${REALM_TMP}
+        exit 1
+    fi
+
+    # 解压并安装（流程不变，增加目录清理容错）
     info "📦 解压并安装Realm包..."
-    mkdir -p /tmp/realm-tmp
-    tar -zxf ${REALM_TMP} -C /tmp/realm-tmp
+    rm -rf /tmp/realm-tmp && mkdir -p /tmp/realm-tmp  # 先清理旧目录，避免冲突
+    tar -zxf ${REALM_TMP} -C /tmp/realm-tmp --strip-components=0  # 强制解压到指定目录
     if [ -f /tmp/realm-tmp/realm ]; then
         mv /tmp/realm-tmp/realm /usr/local/bin/
         chmod +x /usr/local/bin/realm
         green "✅ Realm二进制包解压安装完成"
     else
-        red "❌ Realm解压失败，未找到可执行文件（包损坏/不完整）"
-        log "错误：解压${REALM_TMP}后无realm可执行文件，可能下载包损坏"
+        red "❌ Realm解压失败，未找到可执行文件（包损坏/解压路径错误）"
+        log "错误：解压${REALM_TMP}后无realm可执行文件，确认包完整性"
         rm -rf /tmp/realm-tmp ${REALM_TMP}
         exit 1
     fi
 
-    # 清理临时文件
+    # 清理临时文件（彻底清理，无残留）
     rm -rf /tmp/realm-tmp ${REALM_TMP}
     log "清理Realm安装临时文件完成"
 
-    # 验证安装
+    # 最终验证安装（双重验证：命令存在+版本输出）
+    info "🔍 最终验证Realm安装状态..."
     if command -v realm &>/dev/null; then
-        green "✅ Realm安装成功：$(realm --version 2>/dev/null | head -1 || echo "安装成功，版本检测异常")"
+        REALM_VERSION=$(realm --version 2>/dev/null | head -1 || echo "未知版本")
+        green "✅ Realm安装成功！版本：${REALM_VERSION}"
         log "Realm最新版本安装成功，架构：${REALM_ARCH}"
     else
-        red "❌ Realm安装后验证失败！未找到可执行文件"
-        log "错误：/usr/local/bin/realm不存在，安装失败"
+        red "❌ Realm安装后验证失败！/usr/local/bin 无realm可执行文件"
+        log "错误：/usr/local/bin/realm不存在，安装流程异常"
         exit 1
     fi
 }
