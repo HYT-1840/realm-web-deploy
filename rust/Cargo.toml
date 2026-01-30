@@ -1,1 +1,44 @@
+[package]
+name = "realm-web-rust"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your-email@example.com>"]
+description = "Rust版本Realm Web面板（替代Python）"
+license = "MIT"
 
+[dependencies]
+# Web框架核心
+axum = { version = "0.7", features = ["json", "form", "tls-rustls"] }
+tokio = { version = "1.0", features = ["full"] } # 异步运行时
+hyper = { version = "1.0", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "gzip", "serve-static"] } # 中间件（CORS/压缩）
+
+# 数据库
+rusqlite = { version = "0.29", features = ["bundled", "chrono", "uuid"] } # SQLite同步
+tokio-rusqlite = { version = "0.4", features = ["bundled"] } # SQLite异步
+chrono = { version = "0.4", features = ["serde", "utc"] } # 时间处理
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# 模板引擎（兼容Flask/Jinja2）
+tera = { version = "1.19", features = ["preserve_order"] }
+axum-tera = "0.1" # Axum集成Tera
+
+# 认证会话
+axum-sessions = { version = "0.10", features = ["cookie-store", "rusqlite-store"] }
+rand = "0.8" # 随机数（生成密钥）
+hmac = "0.12"
+sha2 = "0.10"
+
+# 进程管理
+psutil = "3.2" # 进程查询/启动/停止
+nix = { version = "0.28", features = ["signal", "process"] } # 系统信号（优雅退出）
+tokio-process = "0.3"
+
+# 配置/工具
+dotenvy = "0.15" # 环境变量
+serde = { version = "1.0", features = ["derive"] } # 序列化/反序列化
+serde_json = "1.0"
+thiserror = "1.0" # 自定义错误
+anyhow = "1.0" # 错误处理
+tracing = "0.1" # 日志
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
