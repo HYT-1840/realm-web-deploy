@@ -94,30 +94,62 @@ EOF
     log "系统依赖安装成功"
 }
 
-# ===================== 安装Realm =====================
+# ===================== 安装Realm（修复404：使用官方最新二进制安装）=====================
 install_realm() {
     info "🔍 检测Realm是否安装..."
     if command -v realm &>/dev/null; then
-        green "✅ Realm已安装，版本：$(realm --version | head -1)"
-        log "Realm已安装：$(realm --version | head -1)"
+        green "✅ Realm已安装，版本：$(realm --version 2>/dev/null | head -1 || echo "未知版本")"
+        log "Realm已安装，跳过重新安装"
         return
     fi
-    log "Realm未安装，执行官方安装脚本"
-    # 国内镜像安装（备用）
-    if ! curl -fsSL https://raw.githubusercontent.com/zhboner/realm/master/install.sh | bash; then
-        yellow "⚠️  官方安装脚本失败，尝试国内镜像..."
-        if ! curl -fsSL https://gitee.com/mirrors/realm/raw/master/install.sh | bash; then
-            red "❌ Realm安装失败！请手动执行：curl -fsSL https://raw.githubusercontent.com/zhboner/realm/master/install.sh | bash"
-            log "错误：Realm安装脚本执行失败"
-            exit 1
-        fi
-    fi
-    if command -v realm &>/dev/null; then
-        green "✅ Realm安装成功：$(realm --version | head -1)"
-        log "Realm安装成功"
+    log "Realm未安装，执行官方最新二进制包安装（适配amd64/arm64）"
+    
+    # 检测系统架构
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "x86_64" ]; then
+        REALM_ARCH="amd64"
+    elif [ "$ARCH" = "aarch64" ]; then
+        REALM_ARCH="arm64"
     else
-        red "❌ Realm安装后验证失败！"
-        log "错误：Realm安装后未找到可执行文件"
+        red "❌ 不支持的架构：${ARCH}（仅支持amd64/arm64）"
+        log "错误：系统架构${ARCH}不兼容，Realm安装失败"
+        exit 1
+    fi
+    log "检测到系统架构：${ARCH} → 对应Realm包：${REALM_ARCH}"
+
+    # 下载Realm最新二进制包（官方GitHub Release）
+    REALM_TMP="/tmp/realm-linux-${REALM_ARCH}.tar.gz"
+    if ! wget -q -O ${REALM_TMP} "https://github.com/zhboner/realm/releases/latest/download/realm-linux-${REALM_ARCH}.tar.gz"; then
+        red "❌ Realm二进制包下载失败！请检查网络连通GitHub"
+        log "错误：wget下载realm-linux-${REALM_ARCH}.tar.gz失败"
+        rm -f ${REALM_TMP}
+        exit 1
+    fi
+
+    # 解压并安装到系统可执行目录（/usr/local/bin）
+    mkdir -p /tmp/realm-tmp
+    tar -zxf ${REALM_TMP} -C /tmp/realm-tmp
+    if [ -f /tmp/realm-tmp/realm ]; then
+        mv /tmp/realm-tmp/realm /usr/local/bin/
+        chmod +x /usr/local/bin/realm
+        green "✅ Realm二进制包解压安装完成"
+    else
+        red "❌ Realm解压失败，未找到可执行文件"
+        log "错误：解压${REALM_TMP}后无realm可执行文件"
+        rm -rf /tmp/realm-tmp ${REALM_TMP}
+        exit 1
+    fi
+
+    # 清理临时文件
+    rm -rf /tmp/realm-tmp ${REALM_TMP}
+
+    # 验证安装
+    if command -v realm &>/dev/null; then
+        green "✅ Realm安装成功：$(realm --version 2>/dev/null | head -1 || echo "安装成功，版本检测异常")"
+        log "Realm最新版本安装成功，架构：${REALM_ARCH}"
+    else
+        red "❌ Realm安装后验证失败！未找到可执行文件"
+        log "错误：/usr/local/bin/realm不存在，安装失败"
         exit 1
     fi
 }
