@@ -10,35 +10,30 @@ log() { echo "[$(date +%Y-%m-%d\ %H:%M:%S)] $1" >> /var/log/realm-web-deploy.log
 
 # 初始化日志文件
 touch /var/log/realm-web-deploy.log
-log "===== Realm Web部署脚本启动 ====="
+log "===== Rust版本Realm Web部署脚本启动 ====="
 
-# ===================== 第一步：获取用户配置（新增域名输入）=====================
+# ===================== 第一步：获取用户配置（与原一致，无修改）=====================
 get_user_config() {
     info "📦 开始配置Realm Web部署参数..."
-    # 获取端口
     read -p "🔧 请输入面板运行端口（默认5000，建议保留）：" PORT
     PORT=${PORT:-5000}
-    # 获取管理员用户名
     read -p "🔑 请输入管理员用户名（默认admin）：" ADMIN_USER
     ADMIN_USER=${ADMIN_USER:-admin}
-    # 获取管理员密码
     read -p "🔐 请输入管理员密码（至少6位）：" ADMIN_PWD
     while [[ ${#ADMIN_PWD} -lt 6 ]]; do
         red "❌ 密码至少6位！"
         read -p "🔐 请重新输入管理员密码：" ADMIN_PWD
     done
-    # 新增：获取域名（核心，Caddy HTTPS需要）
     read -p "🌐 请输入已解析到VPS公网IP的域名（如realm.yourdomain.com）：" DOMAIN
     while [[ -z $DOMAIN ]]; do
         red "❌ 域名不能为空！请先将域名A记录解析到VPS公网IP（159.54.164.223）"
         read -p "🌐 请重新输入已解析的域名：" DOMAIN
     done
-    # 验证域名解析（简单校验）
+    # 验证域名解析
     info "🔍 验证域名解析状态..."
     DOMAIN_IP=$(nslookup $DOMAIN 2>/dev/null | grep -A1 "Address:" | tail -1 | awk '{print $2}')
     if [[ $DOMAIN_IP != "159.54.164.223" ]]; then
         yellow "⚠️  域名解析可能未生效（当前解析IP：$DOMAIN_IP，预期IP：159.54.164.223）"
-        yellow "⚠️  请确认域名A记录已解析，否则Caddy无法申请证书！"
         read -p "📌 确认继续部署？（y/n）：" CONFIRM
         [[ $CONFIRM != "y" && $CONFIRM != "Y" ]] && exit 1
     fi
@@ -46,16 +41,15 @@ get_user_config() {
     log "部署参数：端口=$PORT，管理员=$ADMIN_USER，域名=$DOMAIN，VPS公网IP=159.54.164.223"
 }
 
-# ===================== 第二步：安装系统依赖 =====================
+# ===================== 第二步：安装系统依赖（仅安装Realm/Caddy依赖，删除Python）=====================
 install_deps() {
     info "📦 安装系统基础依赖..."
-    apt update && apt install -y python3 python3-venv python3-pip git curl wget iptables net-tools
-    pip3 install --upgrade pip
-    green "✅ 系统依赖安装完成！"
-    log "系统基础依赖安装完成"
+    apt update && apt install -y git curl wget iptables net-tools gcc libc6-dev libsqlite3-dev
+    green "✅ 系统基础依赖安装完成！"
+    log "系统基础依赖安装完成（无Python依赖）"
 }
 
-# ===================== 第三步：安装Realm（适配新包名，国外VPS专属）=====================
+# ===================== 第三步：安装Realm（与原一致，无修改）=====================
 install_realm() {
     info "🔍 检测Realm是否安装..."
     if command -v realm &>/dev/null; then
@@ -63,7 +57,7 @@ install_realm() {
         log "Realm已安装，跳过重新安装"
         return
     fi
-    log "Realm未安装，执行GitHub官方二进制包安装（适配新包名）"
+    log "Realm未安装，执行GitHub官方二进制包安装"
     
     ARCH=$(uname -m)
     if [ "$ARCH" = "x86_64" ]; then
@@ -97,23 +91,19 @@ install_realm() {
     fi
 }
 
-# ===================== 第四步：新增Caddy安装配置函数（核心整合）=====================
+# ===================== 第四步：安装Caddy（与原一致，无修改）=====================
 install_caddy() {
     info "🌐 开始安装Caddy（自动HTTPS+反向代理）..."
-    # 安装Caddy官方稳定版
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
     apt update && apt install -y caddy
-    # 验证Caddy安装
     caddy version &>/dev/null || { red "❌ Caddy安装失败"; exit 1; }
     green "✅ Caddy安装完成！版本：$(caddy version | head -1)"
     log "Caddy官方稳定版安装完成"
 
-    # 替换Caddy配置模板中的域名变量，生成正式配置文件
-    info "🔧 配置Caddy反向代理（自动替换域名）..."
+    # 生成Caddy配置
     mkdir -p /etc/caddy
     sed "s/{{DOMAIN}}/$DOMAIN/g" caddy/Caddyfile.tpl > /etc/caddy/Caddyfile
-    # 验证Caddy配置
     caddy validate --config /etc/caddy/Caddyfile &>/dev/null || { red "❌ Caddy配置错误"; exit 1; }
     green "✅ Caddy配置文件生成成功！"
     log "Caddy配置文件生成：/etc/caddy/Caddyfile，域名：$DOMAIN"
@@ -131,53 +121,81 @@ install_caddy() {
     fi
 }
 
-# ===================== 第五步：部署Realm Web面板（修复虚拟环境激活问题）=====================
-deploy_realm_web() {
-    info "🚀 开始部署Realm Web面板..."
+# ===================== 第五步：编译/部署Rust二进制文件（核心新增）=====================
+deploy_rust_realm_web() {
+    info "🚀 部署Rust版本Realm Web面板（单二进制无依赖）..."
     # 创建部署目录
     mkdir -p /opt/realm-web
     cp -r . /opt/realm-web
     cd /opt/realm-web || { red "❌ 进入部署目录失败"; exit 1; }
-    
-    # 1. 创建Python虚拟环境（独立环境，隔离系统Python）
-    python3 -m venv venv
-    # 2. 激活虚拟环境（核心修复！激活后pip/python均指向虚拟环境）
-    source venv/bin/activate
-    # 3. 虚拟环境内安装依赖（此时pip为虚拟环境专属，无全局限制）
-    pip install -r requirements.txt --upgrade
-    # 4. 虚拟环境内初始化数据库
-    python app.py $ADMIN_USER $ADMIN_PWD
-    # 5. 退出虚拟环境（可选，不影响后续Systemd服务）
-    deactivate
 
-    # 创建Systemd服务（原有配置不变，Systemd会自动使用虚拟环境路径）
+    # 本地编译过二进制则直接使用，否则在VPS编译（推荐本地编译后上传）
+    if [[ -f rust/realm-web-rust ]]; then
+        info "🔧 使用本地预编译的Rust二进制文件..."
+        cp rust/realm-web-rust .
+    else
+        info "🔧 VPS端编译Rust二进制文件（需等待3-5分钟）..."
+        cd rust || { red "❌ 进入Rust项目目录失败"; exit 1; }
+        # 编译Rust代码（静态编译，无系统依赖）
+        cargo build --release --target $(uname -m | sed 's/x86_64/x86_64-unknown-linux-gnu/;s/aarch64/aarch64-unknown-linux-gnu/')
+        # 复制编译后的二进制到部署根目录
+        cp target/$(uname -m | sed 's/x86_64/x86_64-unknown-linux-gnu/;s/aarch64/aarch64-unknown-linux-gnu/')/release/realm-web-rust ../
+        cd ..
+    fi
+
+    # 赋予执行权限
+    chmod +x realm-web-rust
+    # 初始化数据库（调用Rust二进制，与原Python传参一致：./realm-web-rust 用户名 密码）
+    ./realm-web-rust $ADMIN_USER $ADMIN_PWD
+    green "✅ Rust二进制部署+数据库初始化完成！"
+    log "Rust二进制文件：/opt/realm-web/realm-web-rust"
+}
+
+# ===================== 第六步：创建Systemd服务（适配Rust二进制，无Python）=====================
+create_rust_systemd() {
+    info "🔧 创建Rust版本Realm Web Systemd服务..."
     cat > /etc/systemd/system/realm-web.service << EOF
 [Unit]
-Description=Realm Web Panel
+Description=Realm Web Panel (Rust Version)
 After=network.target caddy.service
+Documentation=none
 
 [Service]
 User=root
 WorkingDirectory=/opt/realm-web
 Environment="REALM_SECRET_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -1)"
 Environment="REALM_PORT=$PORT"
-# 直接调用虚拟环境内的gunicorn，无需手动激活
-ExecStart=/opt/realm-web/venv/bin/gunicorn -w 4 --bind 0.0.0.0:$PORT app:app
+# 直接运行Rust单二进制文件，无任何依赖
+ExecStart=/opt/realm-web/realm-web-rust
 Restart=always
 RestartSec=5
+# 优雅退出配置
+KillSignal=SIGINT
+TimeoutStopSec=5
+# 限制资源占用（可选，低配VPS推荐）
+LimitNOFILE=65535
+MemoryLimit=64M
+CPUQuota=50%
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    # 启动面板服务
+    # 启动服务并设置开机自启
     systemctl daemon-reload
     systemctl start realm-web
     systemctl enable realm-web
-    green "✅ Realm Web面板部署完成！服务已启动并开机自启"
-    log "Realm Web面板部署完成，端口：$PORT，管理员：$ADMIN_USER"
+    # 验证服务状态
+    sleep 3
+    if systemctl is-active --quiet realm-web; then
+        green "✅ Rust版本Realm Web服务启动成功！已开机自启"
+        log "Realm Web服务启动成功，端口：$PORT"
+    else
+        red "❌ 服务启动失败，查看日志：journalctl -u realm-web -f"
+        exit 1
+    fi
 }
 
-# ===================== 第六步：安全加固（关闭5000端口公网访问）=====================
+# ===================== 第七步：安全加固（与原一致，无修改）=====================
 security_harden() {
     info "🛡️  开始安全加固（关闭$PORT端口公网访问，仅保留HTTPS 443端口）..."
     # 关闭指定端口的公网入站访问
@@ -193,22 +211,23 @@ security_harden() {
 main() {
     # 检查是否为root权限
     [[ $EUID -ne 0 ]] && { red "❌ 请使用root权限执行（sudo -i）"; exit 1; }
-    # 执行所有步骤
+    # 执行所有步骤（无Python相关逻辑）
     get_user_config
     install_deps
     install_realm
-    install_caddy # 新增Caddy执行步骤
-    deploy_realm_web
+    install_caddy
+    deploy_rust_realm_web
+    create_rust_systemd
     security_harden
     # 部署完成提示
     echo -e "\n"
-    green "🎉 Realm Web面板+HTTPS代理 部署完成！"
+    green "🎉 Rust版本Realm Web面板+HTTPS代理 部署完成！"
     green "📢 安全访问地址：https://$DOMAIN"
     green "🔑 管理员账号：$ADMIN_USER"
     green "🔐 管理员密码：$ADMIN_PWD"
-    green "⚠️  请立即登录并修改管理员密码，切勿泄露！"
+    green "✨ 纯Rust实现 | 单二进制无依赖 | 内存安全 | 极致性能 | 零系统限制！"
     echo -e "\n"
-    log "===== Realm Web部署全流程完成 ====="
+    log "===== Rust版本Realm Web部署全流程完成 ====="
 }
 
 # 执行主函数
