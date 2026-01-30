@@ -6,82 +6,166 @@
     <title>Realm管理面板 - 主界面</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background: #f5f7fa; }
-        .card { box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .operation-btn { margin: 0 2px; }
+        body { 
+            background: #f5f7fa; 
+            font-size: 14px;
+        }
+        .card { 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            margin-bottom: 20px;
+            border: none;
+            border-radius: 8px;
+        }
+        .card-header {
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            border-radius: 8px 8px 0 0 !important;
+            padding: 15px 20px;
+            font-weight: 600;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .operation-btn { 
+            margin: 0 2px;
+            padding: 2px 8px;
+        }
+        .badge {
+            font-size: 12px;
+            padding: 5px 8px;
+        }
+        .form-control {
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        .btn {
+            border-radius: 6px;
+        }
+        .table {
+            --bs-table-hover-bg: #f8f9fa;
+        }
+        .table th {
+            font-weight: 600;
+            color: #666;
+        }
+        .alert {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            min-width: 300px;
+            display: none;
+        }
+        .search-bar {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .pagination {
+            justify-content: center;
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
+    <!-- 全局提示框 -->
+    <div class="alert alert-success alert-dismissible fade show" id="globalAlert">
+        <span id="alertMsg"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
     <div class="container mt-4">
         <div class="row">
             <div class="col-12 d-flex justify-content-between align-items-center mb-4">
-                <h3>Realm流量转发管理面板</h3>
-                <div>
+                <h3 class="mb-0">Realm流量转发管理面板</h3>
+                <div class="d-flex align-items-center">
                     <span class="me-3">当前登录：<b id="username"></b></span>
                     <button class="btn btn-outline-danger btn-sm" id="logoutBtn">登出</button>
                 </div>
             </div>
 
-            <!-- 添加子用户 -->
-            <div class="col-md-6">
-                <div class="card p-4">
-                    <h5 class="mb-3">添加子用户</h5>
-                    <form id="addUserForm">
-                        <div class="row g-3">
-                            <div class="col-6">
-                                <input type="text" class="form-control" name="username" placeholder="子用户名" required>
+            <!-- 添加子用户（仅管理员可见，子用户自动隐藏） -->
+            <div class="col-md-6" id="addUserCard">
+                <div class="card">
+                    <div class="card-header">添加子用户</div>
+                    <div class="card-body">
+                        <form id="addUserForm">
+                            <div class="row g-3">
+                                <div class="col-6">
+                                    <input type="text" class="form-control" name="username" placeholder="子用户名（至少3位）" required minlength="3">
+                                </div>
+                                <div class="col-6">
+                                    <input type="password" class="form-control" name="password" placeholder="子用户密码（至少6位）" required minlength="6">
+                                </div>
+                                <div class="col-12">
+                                    <button type="submit" class="btn btn-primary w-100">创建子用户</button>
+                                </div>
                             </div>
-                            <div class="col-6">
-                                <input type="password" class="form-control" name="password" placeholder="子用户密码" required>
-                            </div>
-                            <div class="col-12">
-                                <button type="submit" class="btn btn-primary w-100">创建子用户</button>
-                            </div>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
                 </div>
             </div>
 
-            <!-- 添加转发规则 -->
+            <!-- 添加转发规则（新增备注输入框） -->
             <div class="col-md-6">
-                <div class="card p-4">
-                    <h5 class="mb-3">添加转发规则</h5>
-                    <form id="addRuleForm">
-                        <div class="row g-3">
-                            <div class="col-5">
-                                <input type="number" class="form-control" name="local_port" placeholder="本地监听端口" min="1024" max="65535" required>
+                <div class="card">
+                    <div class="card-header">添加转发规则</div>
+                    <div class="card-body">
+                        <form id="addRuleForm">
+                            <div class="row g-3">
+                                <div class="col-5">
+                                    <input type="number" class="form-control" name="local_port" placeholder="本地监听端口" min="1024" max="65535" required>
+                                </div>
+                                <div class="col-7">
+                                    <input type="text" class="form-control" name="target" placeholder="目标地址(例：192.168.1.100:80)" required>
+                                </div>
+                                <!-- 新增：规则备注输入框（可选） -->
+                                <div class="col-12">
+                                    <input type="text" class="form-control" name="remark" placeholder="规则备注（如：业务A-测试环境，可选）">
+                                </div>
+                                <div class="col-12">
+                                    <button type="submit" class="btn btn-success w-100">添加转发规则</button>
+                                </div>
                             </div>
-                            <div class="col-7">
-                                <input type="text" class="form-control" name="target" placeholder="目标地址(例：192.168.1.100:80)" required>
-                            </div>
-                            <div class="col-12">
-                                <button type="submit" class="btn btn-success w-100">添加转发规则</button>
-                            </div>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
                 </div>
             </div>
 
-            <!-- 转发规则列表 -->
+            <!-- 转发规则列表（新增搜索+分页+备注列） -->
             <div class="col-12">
-                <div class="card p-4">
-                    <h5 class="mb-3">我的转发规则</h5>
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-hover">
-                            <thead class="table-light">
-                                <tr>
-                                    <<th>ID</</th>
-                                    <<th>本地监听端口</</th>
-                                    <<th>目标地址</</th>
-                                    <<th>进程ID</</th>
-                                    <<th>运行状态</</th>
-                                    <<th>操作</</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ruleTableBody">
-                                <tr><td colspan="6" class="text-center text-muted">暂无转发规则</td></tr>
-                            </tbody>
-                        </table>
+                <div class="card">
+                    <div class="card-header">我的转发规则</div>
+                    <div class="card-body p-0">
+                        <!-- 新增：规则搜索栏 -->
+                        <div class="search-bar px-4 pt-3">
+                            <input type="text" id="ruleSearch" class="form-control flex-grow-1" placeholder="搜索：端口/目标地址/备注">
+                            <button class="btn btn-outline-primary btn-sm" id="searchBtn">搜索</button>
+                            <button class="btn btn-outline-secondary btn-sm" id="resetBtn">重置</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>本地监听端口</th>
+                                        <th>目标地址</th>
+                                        <th>规则备注</th> <!-- 新增：备注列 -->
+                                        <th>进程ID</th>
+                                        <th>运行状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ruleTableBody">
+                                    <tr><td colspan="7" class="text-center text-muted py-3">暂无转发规则</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- 新增：分页控件 -->
+                        <nav class="pagination" id="paginationNav">
+                            <ul class="pagination mb-0" id="pagination"></ul>
+                        </nav>
                     </div>
                 </div>
             </div>
@@ -92,32 +176,56 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         $(function() {
-            // 初始化用户名
+            // 初始化变量（分页+角色控制）
             const username = '{{ username }}';
+            const role = '{{ role }}'; // 由后端传递的用户角色：super_admin/admin/user
+            let currentPage = 1;
+            const pageSize = 10; // 每页显示10条规则
+            let totalPages = 1;
+            let allRules = []; // 缓存所有规则，用于搜索/分页过滤
+
+            // 初始化页面
             $('#username').text(username);
+            initRoleControl(); // 根据角色隐藏/显示功能
+            loadRules(); // 加载规则列表
 
-            // 加载当前用户的规则列表
-            loadRules();
+            // 全局提示框函数（优化体验，替代原生alert）
+            function showAlert(msg, type = 'success') {
+                const $alert = $('#globalAlert');
+                $alert.removeClass('alert-success alert-danger alert-warning').addClass(`alert-${type}`);
+                $('#alertMsg').text(msg);
+                $alert.fadeIn();
+                setTimeout(() => $alert.fadeOut(), 3000);
+            }
 
-            // 登出功能
+            // 1. 角色权限控制：子用户隐藏「添加子用户」功能
+            function initRoleControl() {
+                if (role === 'user') {
+                    $('#addUserCard').hide(); // 子用户无添加用户权限，隐藏卡片
+                }
+            }
+
+            // 2. 登出功能
             $('#logoutBtn').on('click', function() {
                 if (confirm('确定要登出吗？')) {
                     $.ajax({
                         url: '/api/logout',
                         type: 'POST',
+                        dataType: 'json',
                         success: function(res) {
-                            alert(res.msg);
-                            window.location.href = '/login';
-                        }
+                            showAlert(res.msg);
+                            setTimeout(() => window.location.href = '/login', 1000);
+                        },
+                        error: () => showAlert('登出请求失败', 'danger')
                     });
                 }
             });
 
-            // 添加子用户
+            // 3. 添加子用户（仅管理员可操作，后端二次校验）
             $('#addUserForm').on('submit', function(e) {
                 e.preventDefault();
                 const data = $(this).serializeArray().reduce((obj, item) => {
-                    obj[item.name] = item.value;
+                    obj[item.name] = item.value.trim();
                     return obj;
                 }, {});
                 $.ajax({
@@ -126,55 +234,55 @@
                     contentType: 'application/json',
                     data: JSON.stringify(data),
                     success: function(res) {
-                        alert(res.msg);
-                        if (res.code === 0) $('#addUserForm')[0].reset();
-                    }
+                        res.code === 0 ? (showAlert(res.msg), $('#addUserForm')[0].reset()) : showAlert(res.msg, 'danger');
+                    },
+                    error: () => showAlert('添加用户失败，请重试', 'danger')
                 });
             });
 
-            // 添加转发规则
+            // 4. 添加转发规则（含备注提交）
             $('#addRuleForm').on('submit', function(e) {
                 e.preventDefault();
                 const data = $(this).serializeArray().reduce((obj, item) => {
-                    obj[item.name] = item.value;
+                    obj[item.name] = item.value.trim();
                     return obj;
                 }, {});
+                // 简单格式校验（后端二次校验）
+                if (!/^\d+:\S+$/.test(data.target)) {
+                    return showAlert('目标地址格式错误（例：192.168.1.100:80）', 'warning');
+                }
                 $.ajax({
                     url: '/api/add_rule',
                     type: 'POST',
                     contentType: 'application/json',
                     data: JSON.stringify(data),
                     success: function(res) {
-                        alert(res.msg);
                         if (res.code === 0) {
+                            showAlert(res.msg);
                             $('#addRuleForm')[0].reset();
-                            loadRules(); // 刷新规则列表
+                            loadRules(); // 添加成功后刷新规则列表
+                        } else {
+                            showAlert(res.msg, 'danger');
                         }
-                    }
+                    },
+                    error: () => showAlert('添加规则失败，请重试', 'danger')
                 });
             });
 
-            // 启动规则
+            // 5. 规则操作：启动/停止/删除（委托给通用函数）
             $(document).on('click', '.startRuleBtn', function() {
-                const ruleId = $(this).data('id');
-                operateRule(ruleId, 'start_rule', '启动');
+                operateRule($(this).data('id'), 'start_rule', '启动');
             });
-
-            // 停止规则
             $(document).on('click', '.stopRuleBtn', function() {
-                const ruleId = $(this).data('id');
-                operateRule(ruleId, 'stop_rule', '停止');
+                operateRule($(this).data('id'), 'stop_rule', '停止');
             });
-
-            // 删除规则
             $(document).on('click', '.deleteRuleBtn', function() {
-                const ruleId = $(this).data('id');
-                if (confirm('确定要删除该规则吗？会自动停止对应进程！')) {
-                    operateRule(ruleId, 'delete_rule', '删除');
+                if (confirm('确定删除？将自动停止对应进程，且不可恢复！')) {
+                    operateRule($(this).data('id'), 'delete_rule', '删除');
                 }
             });
 
-            // 通用规则操作函数
+            // 通用规则操作函数（减少冗余代码）
             function operateRule(ruleId, api, action) {
                 $.ajax({
                     url: `/api/${api}`,
@@ -182,57 +290,153 @@
                     contentType: 'application/json',
                     data: JSON.stringify({ rule_id: ruleId }),
                     success: function(res) {
-                        alert(res.msg);
-                        if (res.code === 0) loadRules(); // 操作成功后刷新列表
-                    }
+                        res.code === 0 ? (showAlert(res.msg), loadRules()) : showAlert(res.msg, 'danger');
+                    },
+                    error: () => showAlert(`${action}失败，请重试`, 'danger')
                 });
             }
 
-            // 加载规则列表
+            // 6. 规则搜索：支持端口/目标地址/备注模糊匹配
+            $('#searchBtn').click(() => {
+                currentPage = 1; // 搜索后重置为第一页
+                loadRules();
+            });
+            $('#resetBtn').click(() => {
+                $('#ruleSearch').val('');
+                currentPage = 1;
+                loadRules();
+            });
+            // 回车触发搜索
+            $('#ruleSearch').keypress((e) => {
+                if (e.which === 13) $('#searchBtn').click();
+            });
+
+            // 7. 加载规则列表（核心：支持搜索+分页，从后端拉取全量数据）
             function loadRules() {
                 $.ajax({
                     url: '/api/get_rules',
                     type: 'GET',
+                    dataType: 'json',
                     success: function(res) {
                         if (res.code === 0) {
-                            const $tbody = $('#ruleTableBody');
-                            $tbody.empty();
-                            if (res.data.length === 0) {
-                                $tbody.append('<tr><td colspan="6" class="text-center text-muted">暂无转发规则</td></tr>');
-                                return;
-                            }
-                            // 渲染规则数据
-                            res.data.forEach(rule => {
-                                const statusBadge = rule.status === 'run' 
-                                    ? '<span class="badge bg-success">运行中</span>' 
-                                    : '<span class="badge bg-secondary">已停止</span>';
-                                const startBtn = rule.status === 'stop' 
-                                    ? `<button class="btn btn-sm btn-success operation-btn startRuleBtn" data-id="${rule.id}">启动</button>` 
-                                    : '';
-                                const stopBtn = rule.status === 'run' 
-                                    ? `<button class="btn btn-sm btn-warning operation-btn stopRuleBtn" data-id="${rule.id}">停止</button>` 
-                                    : '';
-                                $tbody.append(`
-                                    <tr>
-                                        <td>${rule.id}</td>
-                                        <td>${rule.local_port}</td>
-                                        <td>${rule.target}</td>
-                                        <td>${rule.pid || '-'}</td>
-                                        <td>${statusBadge}</td>
-                                        <td>
-                                            ${startBtn}
-                                            ${stopBtn}
-                                            <button class="btn btn-sm btn-danger operation-btn deleteRuleBtn" data-id="${rule.id}">删除</button>
-                                        </td>
-                                    </tr>
-                                `);
-                            });
+                            allRules = res.data; // 缓存全量规则
+                            filterRules(); // 过滤（搜索）+ 分页
+                        } else {
+                            showAlert('加载规则失败', 'danger');
                         }
-                    }
+                    },
+                    error: () => showAlert('加载规则请求失败', 'danger')
                 });
             }
+
+            // 8. 过滤规则（搜索）+ 分页处理
+            function filterRules() {
+                const keyword = $('#ruleSearch').val().toLowerCase().trim();
+                // 搜索过滤：匹配端口/目标地址/备注
+                let filteredRules = allRules;
+                if (keyword) {
+                    filteredRules = allRules.filter(rule => 
+                        rule.local_port.toString().includes(keyword) ||
+                        rule.target.toLowerCase().includes(keyword) ||
+                        (rule.remark && rule.remark.toLowerCase().includes(keyword))
+                    );
+                }
+                // 计算分页总数
+                totalPages = Math.ceil(filteredRules.length / pageSize);
+                // 截取当前页数据
+                const start = (currentPage - 1) * pageSize;
+                const end = start + pageSize;
+                const currentRules = filteredRules.slice(start, end);
+                // 渲染页面
+                renderRuleTable(currentRules);
+                renderPagination();
+            }
+
+            // 9. 渲染规则表格（新增备注列显示）
+            function renderRuleTable(rules) {
+                const $tbody = $('#ruleTableBody');
+                $tbody.empty();
+                if (rules.length === 0) {
+                    $tbody.append('<tr><td colspan="7" class="text-center text-muted py-3">暂无转发规则</td></tr>');
+                    return;
+                }
+                rules.forEach(rule => {
+                    // 状态徽章
+                    const statusBadge = rule.status === 'run' 
+                        ? '<span class="badge bg-success">运行中</span>' 
+                        : '<span class="badge bg-secondary">已停止</span>';
+                    // 操作按钮（根据状态显示/隐藏）
+                    const startBtn = rule.status === 'stop' 
+                        ? `<button class="btn btn-sm btn-success operation-btn startRuleBtn" data-id="${rule.id}">启动</button>` 
+                        : '';
+                    const stopBtn = rule.status === 'run' 
+                        ? `<button class="btn btn-sm btn-warning operation-btn stopRuleBtn" data-id="${rule.id}">停止</button>` 
+                        : '';
+                    // 渲染行
+                    $tbody.append(`
+                        <tr>
+                            <td>${rule.id}</td>
+                            <td>${rule.local_port}</td>
+                            <td>${rule.target}</td>
+                            <td>${rule.remark || '-'}</td> <!-- 显示备注，无则显示- -->
+                            <td>${rule.pid || '-'}</td>
+                            <td>${statusBadge}</td>
+                            <td>
+                                ${startBtn}
+                                ${stopBtn}
+                                <button class="btn btn-sm btn-danger operation-btn deleteRuleBtn" data-id="${rule.id}">删除</button>
+                            </td>
+                        </tr>
+                    `);
+                });
+            }
+
+            // 10. 渲染分页控件（上一页/页码/下一页）
+            function renderPagination() {
+                const $pagination = $('#pagination');
+                $pagination.empty();
+                // 隐藏分页：无数据或仅1页
+                if (totalPages <= 1) {
+                    $('#paginationNav').hide();
+                    return;
+                }
+                $('#paginationNav').show();
+                // 上一页
+                $pagination.append(`
+                    <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                        <a class="page-link" href="javascript:changePage(${currentPage - 1})">上一页</a>
+                    </li>
+                `);
+                // 页码（仅显示前后3页，避免页码过多）
+                const startPage = Math.max(1, currentPage - 3);
+                const endPage = Math.min(totalPages, currentPage + 3);
+                for (let i = startPage; i <= endPage; i++) {
+                    $pagination.append(`
+                        <li class="page-item ${i === currentPage ? 'active' : ''}">
+                            <a class="page-link" href="javascript:changePage(${i})">${i}</a>
+                        </li>
+                    `);
+                }
+                // 下一页
+                $pagination.append(`
+                    <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                        <a class="page-link" href="javascript:changePage(${currentPage + 1})">下一页</a>
+                    </li>
+                `);
+            }
+
+            // 11. 切换分页
+            window.changePage = function(page) {
+                if (page < 1 || page > totalPages) return;
+                currentPage = page;
+                filterRules(); // 重新过滤并渲染当前页
+            };
+
+            // 12. 表单输入验证（失焦校验，提升体验）
+            $('input[required]').on('blur', function() {
+                $(this).val().trim() ? $(this).removeClass('is-invalid') : $(this).addClass('is-invalid');
+            });
         });
     </script>
 </body>
 </html>
-
