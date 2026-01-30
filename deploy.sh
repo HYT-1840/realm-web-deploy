@@ -94,7 +94,7 @@ EOF
     log "系统依赖安装成功"
 }
 
-# ===================== 安装Realm（修复404：使用官方最新二进制安装）=====================
+# ===================== 安装Realm（国外VPS专属：GitHub主源+增强下载稳定性）=====================
 install_realm() {
     info "🔍 检测Realm是否安装..."
     if command -v realm &>/dev/null; then
@@ -102,7 +102,7 @@ install_realm() {
         log "Realm已安装，跳过重新安装"
         return
     fi
-    log "Realm未安装，执行官方最新二进制包安装（适配amd64/arm64）"
+    log "Realm未安装，执行GitHub官方二进制包安装（适配amd64/arm64，国外VPS专属）"
     
     # 检测系统架构
     ARCH=$(uname -m)
@@ -117,16 +117,25 @@ install_realm() {
     fi
     log "检测到系统架构：${ARCH} → 对应Realm包：${REALM_ARCH}"
 
-    # 下载Realm最新二进制包（官方GitHub Release）
+    # 定义GitHub官方下载地址（国外VPS直接使用，无镜像）
     REALM_TMP="/tmp/realm-linux-${REALM_ARCH}.tar.gz"
-    if ! wget -q -O ${REALM_TMP} "https://github.com/zhboner/realm/releases/latest/download/realm-linux-${REALM_ARCH}.tar.gz"; then
-        red "❌ Realm二进制包下载失败！请检查网络连通GitHub"
-        log "错误：wget下载realm-linux-${REALM_ARCH}.tar.gz失败"
+    GITHUB_URL="https://github.com/zhboner/realm/releases/latest/download/realm-linux-${REALM_ARCH}.tar.gz"
+
+    # 增强型wget下载：显示进度+15秒超时+3次重试（解决GitHub瞬时波动）
+    info "🔗 从GitHub官方源下载Realm包（显示进度+自动重试）..."
+    if wget -O ${REALM_TMP} ${GITHUB_URL} --show-progress -q --timeout=15 --tries=3; then
+        green "✅ GitHub官方源下载成功"
+    else
+        red "❌ Realm二进制包下载失败！"
+        red "   排查方向：1. 确认VPS能访问GitHub（curl -I ${GITHUB_URL} 测试）"
+        red "   排查方向：2. 检查VPS磁盘空间（/tmp目录需至少50M空闲）"
+        log "错误：wget下载${GITHUB_URL}失败（超时/重试3次仍失败）"
         rm -f ${REALM_TMP}
         exit 1
     fi
 
     # 解压并安装到系统可执行目录（/usr/local/bin）
+    info "📦 解压并安装Realm包..."
     mkdir -p /tmp/realm-tmp
     tar -zxf ${REALM_TMP} -C /tmp/realm-tmp
     if [ -f /tmp/realm-tmp/realm ]; then
@@ -134,14 +143,15 @@ install_realm() {
         chmod +x /usr/local/bin/realm
         green "✅ Realm二进制包解压安装完成"
     else
-        red "❌ Realm解压失败，未找到可执行文件"
-        log "错误：解压${REALM_TMP}后无realm可执行文件"
+        red "❌ Realm解压失败，未找到可执行文件（包损坏/不完整）"
+        log "错误：解压${REALM_TMP}后无realm可执行文件，可能下载包损坏"
         rm -rf /tmp/realm-tmp ${REALM_TMP}
         exit 1
     fi
 
     # 清理临时文件
     rm -rf /tmp/realm-tmp ${REALM_TMP}
+    log "清理Realm安装临时文件完成"
 
     # 验证安装
     if command -v realm &>/dev/null; then
