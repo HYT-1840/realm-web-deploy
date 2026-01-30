@@ -42,15 +42,27 @@ chmod +x deploy.sh
 
 realm-web-deploy/
 ├── deploy.sh          # 主部署脚本（仅少量修改，删除Python逻辑）
+
 ├── caddy/             # 原有Caddy配置模板（无需任何修改）
+
 ├── templates/         # 原有前端模板（index.html/login.html，直接复用）
+
 ├── rust/              # 新增Rust项目目录（核心重构代码）
+
 │   ├── Cargo.toml     # Rust依赖管理（类似Python的requirements.txt）
+
 │   ├── Cargo.lock     # 依赖校验文件（自动生成）
+
 │   └── src/           # 源码目录
+
 │       ├── main.rs    # 入口文件（Web服务启动/路由注册）
+
 │       ├── db.rs      # 数据库操作（SQLite初始化/增删改查）
+
 │       ├── process.rs # 进程管理（Realm启动/停止/守护）
+
 │       ├── auth.rs    # 认证模块（登录/登出/权限控制）
+
 │       └── models.rs  # 数据模型（与SQLite表结构一一对应）
+
 └── README.md          # 部署说明（可选更新）
