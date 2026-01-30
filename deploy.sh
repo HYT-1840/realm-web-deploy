@@ -7,7 +7,7 @@ DEFAULT_PORT=5000                    # 默认服务端口
 SERVICE_NAME="realm-web"             # Systemd服务名
 ADMIN_USER="admin"                   # 默认管理员用户名
 DEPLOY_LOG="/var/log/realm-web-deploy.log"  # 部署日志
-SERVICE_LOG="/var/log/realm-web-service.log"# 服务运行日志
+SERVICE_LOG="/var/log/realm-web-service.log" # 服务运行日志
 GITHUB_REPO="https://github.com/HYT-1840/realm-web-deploy"  # 代码仓库地址
 
 # ===================== 颜色输出函数 =====================
