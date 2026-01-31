@@ -1,65 +1,6 @@
 #!/bin/bash
 set -e
 
-# 交互主菜单
-show_menu() {
-    clear
-    echo "==================== Realm Web Rust 管理脚本 ===================="
-    echo "1. 安装部署面板"
-    echo "2. 卸载面板(保留数据库)"
-    echo "3. 启动面板服务"
-    echo "4. 停止面板服务"
-    echo "5. 重启面板服务"
-    echo "6. 查看实时日志"
-    echo "0. 退出脚本"
-    echo "================================================================"
-    read -p "请输入操作序号[0-6]:" choice
-}
-
-# 菜单循环
-while true; do
-    show_menu
-    case $choice in
-        1)
-            echo "开始安装部署..."
-            main # 直接调用你原脚本的主函数
-            exit 0
-            ;;
-        2)
-            read -p "确定卸载? [y/N] " confirm
-            if [[ $confirm == y || $confirm == Y ]]; then
-                systemctl stop realm-web
-                systemctl disable realm-web
-                rm -rf /opt/realm-web
-                rm -f /etc/systemd/system/realm-web.service
-                rm -f /etc/caddy/Caddyfile
-                systemctl daemon-reload
-                echo "卸载完成(保留数据库realm.db)"
-            fi
-            ;;
-        3)
-            systemctl start realm-web
-            systemctl status realm-web --no-pager
-            ;;
-        4)
-            systemctl stop realm-web
-            ;;
-        5)
-            systemctl restart realm-web
-            ;;
-        6)
-            journalctl -u realm-web -f
-            ;;
-        0)
-            exit 0
-            ;;
-        *)
-            echo "输入无效"
-            ;;
-    esac
-    read -p "按回车继续..."
-done
-
 # 颜色输出函数
 red() { echo -e "\033[31m$1\033[0m"; }
 green() { echo -e "\033[32m$1\033[0m"; }
@@ -69,171 +10,146 @@ log() { echo "[$(date +%Y-%m-%d\ %H:%M:%S)] $1" >> /var/log/realm-web-deploy.log
 
 # 初始化日志文件
 touch /var/log/realm-web-deploy.log
-log "===== Rust版本Realm Web部署脚本启动 ====="
+log "===== Realm Web Rust 管理脚本启动 ====="
 
-# ===================== 第一步：获取用户配置（与原一致，无修改）=====================
+# 交互主菜单
+show_menu() {
+    clear
+    echo "================================================================"
+    echo "           Realm Web Rust 面板管理脚本 (Caddy2.10+兼容)"
+    echo "================================================================"
+    echo "1. 全新安装部署面板"
+    echo "2. 卸载面板 (保留数据库/转发规则)"
+    echo "3. 启动面板服务"
+    echo "4. 停止面板服务"
+    echo "5. 重启面板服务"
+    echo "6. 查看面板实时日志"
+    echo "7. 查看Caddy实时日志"
+    echo "0. 退出脚本"
+    echo "================================================================"
+    read -p "请输入操作序号 [0-7]：" choice
+}
+
+# 检查root权限
+check_root() {
+    [[ $EUID -ne 0 ]] && { red "❌ 请使用root权限执行（sudo -i）"; exit 1; }
+}
+
+# 获取用户配置
 get_user_config() {
     info "📦 开始配置Realm Web部署参数..."
     read -p "🔧 请输入面板运行端口（默认5000，建议保留）：" PORT
     PORT=${PORT:-5000}
     read -p "🔑 请输入管理员用户名（默认admin）：" ADMIN_USER
     ADMIN_USER=${ADMIN_USER:-admin}
-    read -p "🔐 请输入管理员密码（至少6位）：" ADMIN_PWD
+    read -s -p "🔐 请输入管理员密码（至少6位）：" ADMIN_PWD
+    echo
     while [[ ${#ADMIN_PWD} -lt 6 ]]; do
         red "❌ 密码至少6位！"
-        read -p "🔐 请重新输入管理员密码：" ADMIN_PWD
+        read -s -p "🔐 请重新输入管理员密码：" ADMIN_PWD
+        echo
     done
-    read -p "🌐 请输入已解析到VPS公网IP的域名（如realm.yourdomain.com）：" DOMAIN
+    read -p "🌐 请输入已解析到当前服务器的域名：" DOMAIN
     while [[ -z $DOMAIN ]]; do
-        red "❌ 域名不能为空！请先将域名A记录解析到VPS公网IP（159.54.164.223）"
-        read -p "🌐 请重新输入已解析的域名：" DOMAIN
+        red "❌ 域名不能为空！"
+        read -p "🌐 请重新输入域名：" DOMAIN
     done
-    # 验证域名解析
-    info "🔍 验证域名解析状态..."
-    DOMAIN_IP=$(nslookup $DOMAIN 2>/dev/null | grep -A1 "Address:" | tail -1 | awk '{print $2}')
-    if [[ $DOMAIN_IP != "159.54.164.223" ]]; then
-        yellow "⚠️  域名解析可能未生效（当前解析IP：$DOMAIN_IP，预期IP：159.54.164.223）"
-        read -p "📌 确认继续部署？（y/n）：" CONFIRM
-        [[ $CONFIRM != "y" && $CONFIRM != "Y" ]] && exit 1
-    fi
     green "✅ 部署参数配置完成！"
-    log "部署参数：端口=$PORT，管理员=$ADMIN_USER，域名=$DOMAIN，VPS公网IP=159.54.164.223"
+    log "参数：端口=$PORT，管理员=$ADMIN_USER，域名=$DOMAIN"
 }
 
-# ===================== 第二步：安装系统依赖（仅安装Realm/Caddy依赖，删除Python）=====================
+# 安装系统依赖
 install_deps() {
     info "📦 安装系统基础依赖..."
     apt update && apt install -y git curl wget iptables net-tools gcc libc6-dev libsqlite3-dev
-    green "✅ 系统基础依赖安装完成！"
-    log "系统基础依赖安装完成（无Python依赖）"
+    green "✅ 系统依赖安装完成！"
 }
 
-# ===================== 第三步：安装Realm（与原一致，无修改）=====================
+# 安装Realm核心
 install_realm() {
     info "🔍 检测Realm是否安装..."
     if command -v realm &>/dev/null; then
-        green "✅ Realm已安装，版本：$(realm --version 2>/dev/null | head -1 || echo "未知版本")"
-        log "Realm已安装，跳过重新安装"
+        green "✅ Realm已安装"
         return
     fi
-    log "Realm未安装，执行GitHub官方二进制包安装"
-    
     ARCH=$(uname -m)
     if [ "$ARCH" = "x86_64" ]; then
-        REALM_ARCH_FULL="x86_64-unknown-linux-gnu"
+        REALM_ARCH="x86_64-unknown-linux-gnu"
     elif [ "$ARCH" = "aarch64" ]; then
-        REALM_ARCH_FULL="aarch64-unknown-linux-gnu"
+        REALM_ARCH="aarch64-unknown-linux-gnu"
     else
-        red "❌ 不支持的架构：${ARCH}"
-        log "系统架构${ARCH}不兼容，Realm安装失败"
-        exit 1
+        red "❌ 不支持架构：${ARCH}"; exit 1
     fi
-
-    REALM_TMP="/tmp/realm-${REALM_ARCH_FULL}.tar.gz"
-    GITHUB_URL="https://github.com/zhboner/realm/releases/latest/download/realm-${REALM_ARCH_FULL}.tar.gz"
-
-    info "🔗 从GitHub下载Realm官方新包..."
-    wget --no-check-certificate -L -O ${REALM_TMP} ${GITHUB_URL} --show-progress --timeout=20 --tries=5
-    [[ ! -f ${REALM_TMP} || $(du -k ${REALM_TMP} | awk '{print $1}') -lt 10240 ]] && { red "❌ Realm包损坏"; exit 1; }
-
-    rm -rf /tmp/realm-tmp && mkdir -p /tmp/realm-tmp
-    tar -zxf ${REALM_TMP} -C /tmp/realm-tmp
-    mv /tmp/realm-tmp/realm /usr/local/bin/ && chmod +x /usr/local/bin/realm
-    rm -rf /tmp/realm-tmp ${REALM_TMP}
-
-    if command -v realm &>/dev/null; then
-        green "✅ Realm安装成功！版本：$(realm --version 2>/dev/null | head -1)"
-        log "Realm安装成功，架构：${REALM_ARCH_FULL}"
-    else
-        red "❌ Realm安装失败"
-        exit 1
-    fi
+    REALM_TMP="/tmp/realm.tar.gz"
+    wget -L -O $REALM_TMP "https://github.com/zhboner/realm/releases/latest/download/realm-${REALM_ARCH}.tar.gz" --timeout=20
+    tar -zxf $REALM_TMP -C /tmp
+    mv /tmp/realm /usr/local/bin/ && chmod +x /usr/local/bin/realm
+    rm -rf $REALM_TMP /tmp/realm
+    green "✅ Realm安装完成"
 }
 
-# ===================== 第四步：安装Caddy（与原一致，无修改）=====================
+# 安装并配置Caddy(修复兼容Caddy2.10+)
 install_caddy() {
-    info "🌐 开始安装Caddy（自动HTTPS+反向代理）..."
+    info "🌐 安装配置Caddy..."
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
     apt update && apt install -y caddy
     caddy version &>/dev/null || { red "❌ Caddy安装失败"; exit 1; }
     green "✅ Caddy安装完成！版本：$(caddy version | head -1)"
-    log "Caddy官方稳定版安装完成"
 
-    # 生成Caddy配置
     mkdir -p /etc/caddy
     sed "s/{{DOMAIN}}/$DOMAIN/g" caddy/Caddyfile.tpl > /etc/caddy/Caddyfile
-    # 自动清理废弃指令，兼容Caddy 2.10+
+    # 清理废弃指令，兼容Caddy2.10+
     sed -i -e '/renew_before/d' -e '/storage/d' /etc/caddy/Caddyfile
     caddy validate --config /etc/caddy/Caddyfile &>/dev/null || { red "❌ Caddy配置错误"; exit 1; }
-    green "✅ Caddy配置文件生成成功！"
-    log "Caddy配置文件生成：/etc/caddy/Caddyfile，域名：$DOMAIN"
+    green "✅ Caddy配置生成完成"
 
-    # 启动Caddy并设置开机自启
-    systemctl start caddy
+    systemctl restart caddy
     systemctl enable caddy
     sleep 3
-    if systemctl is-active --quiet caddy; then
-        green "✅ Caddy服务启动成功（已自动申请SSL证书）"
-        log "Caddy服务启动成功，开机自启已开启"
-    else
-        red "❌ Caddy服务启动失败，查看日志：journalctl -u caddy -f"
-        exit 1
-    fi
+    systemctl is-active --quiet caddy || { red "❌ Caddy启动失败"; exit 1; }
+    green "✅ Caddy服务正常运行"
 }
 
-# ===================== 第五步：编译/部署Rust二进制文件（核心新增）=====================
-deploy_rust_realm_web() {
-    info "🚀 部署Rust版本Realm Web面板（单二进制无依赖）..."
-    # 创建部署目录
+# 部署Rust面板
+deploy_rust() {
+    info "🚀 部署Rust面板..."
     mkdir -p /opt/realm-web
-    cp -r . /opt/realm-web
-    cd /opt/realm-web || { red "❌ 进入部署目录失败"; exit 1; }
+    \cp -r . /opt/realm-web
+    cd /opt/realm-web
 
-    # 本地编译过二进制则直接使用，否则在VPS编译（推荐本地编译后上传）
     if [[ -f rust/realm-web-rust ]]; then
-        info "🔧 使用本地预编译的Rust二进制文件..."
-        cp rust/realm-web-rust .
+        info "🔧 使用预编译二进制文件"
+        \cp rust/realm-web-rust .
     else
-        info "🔧 VPS端编译Rust二进制文件（需等待3-5分钟）..."
-        cd rust || { red "❌ 进入Rust项目目录失败"; exit 1; }
-        # 编译Rust代码（静态编译，无系统依赖）
+        info "🔧 编译Rust项目(首次耗时较长)"
+        cd rust
         cargo build --release --target $(uname -m | sed 's/x86_64/x86_64-unknown-linux-gnu/;s/aarch64/aarch64-unknown-linux-gnu/')
-        # 复制编译后的二进制到部署根目录
-        cp target/$(uname -m | sed 's/x86_64/x86_64-unknown-linux-gnu/;s/aarch64/aarch64-unknown-linux-gnu/')/release/realm-web-rust ../
+        \cp target/$(uname -m | sed 's/x86_64/x86_64-unknown-linux-gnu/;s/aarch64/aarch64-unknown-linux-gnu/')/release/realm-web-rust ../
         cd ..
     fi
 
-    # 赋予执行权限
     chmod +x realm-web-rust
-    # 初始化数据库（调用Rust二进制，与原Python传参一致：./realm-web-rust 用户名 密码）
     ./realm-web-rust $ADMIN_USER $ADMIN_PWD
-    green "✅ Rust二进制部署+数据库初始化完成！"
-    log "Rust二进制文件：/opt/realm-web/realm-web-rust"
+    green "✅ Rust面板部署&数据库初始化完成"
 }
 
-# ===================== 第六步：创建Systemd服务（适配Rust二进制，无Python）=====================
-create_rust_systemd() {
-    info "🔧 创建Rust版本Realm Web Systemd服务..."
+# 创建Systemd服务
+create_service() {
+    info "🔧 创建系统服务..."
     cat > /etc/systemd/system/realm-web.service << EOF
 [Unit]
-Description=Realm Web Panel (Rust Version)
+Description=Realm Web Panel Rust
 After=network.target caddy.service
-Documentation=none
 
 [Service]
 User=root
 WorkingDirectory=/opt/realm-web
-Environment="REALM_SECRET_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -1)"
+Environment="REALM_SECRET_KEY=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w32 | head -1)"
 Environment="REALM_PORT=$PORT"
-# 直接运行Rust单二进制文件，无任何依赖
 ExecStart=/opt/realm-web/realm-web-rust
 Restart=always
 RestartSec=5
-# 优雅退出配置
-KillSignal=SIGINT
-TimeoutStopSec=5
-# 限制资源占用（可选，低配VPS推荐）
 LimitNOFILE=65535
 MemoryLimit=64M
 CPUQuota=50%
@@ -241,55 +157,104 @@ CPUQuota=50%
 [Install]
 WantedBy=multi-user.target
 EOF
-    # 启动服务并设置开机自启
+
     systemctl daemon-reload
-    systemctl start realm-web
+    systemctl restart realm-web
     systemctl enable realm-web
-    # 验证服务状态
     sleep 3
-    if systemctl is-active --quiet realm-web; then
-        green "✅ Rust版本Realm Web服务启动成功！已开机自启"
-        log "Realm Web服务启动成功，端口：$PORT"
-    else
-        red "❌ 服务启动失败，查看日志：journalctl -u realm-web -f"
-        exit 1
-    fi
+    systemctl is-active --quiet realm-web || { red "❌ 面板服务启动失败"; exit 1; }
+    green "✅ 面板服务正常运行"
 }
 
-# ===================== 第七步：安全加固（与原一致，无修改）=====================
-security_harden() {
-    info "🛡️  开始安全加固（关闭$PORT端口公网访问，仅保留HTTPS 443端口）..."
-    # 关闭指定端口的公网入站访问
+# 防火墙加固
+firewall_secure() {
+    info "🛡️ 防火墙加固，仅开放443端口"
     iptables -A INPUT -p tcp --dport $PORT -j DROP
-    # 保存iptables规则（Ubuntu/Debian）
     mkdir -p /etc/iptables
     iptables-save > /etc/iptables/rules.v4
-    green "✅ 安全加固完成！$PORT端口公网访问已关闭，仅可通过HTTPS访问"
-    log "安全加固：关闭$PORT端口公网访问，保存iptables规则"
+    green "✅ 安全加固完成"
 }
 
-# ===================== 主执行流程 =====================
+# 安装主流程
 main() {
-    # 检查是否为root权限
-    [[ $EUID -ne 0 ]] && { red "❌ 请使用root权限执行（sudo -i）"; exit 1; }
-    # 执行所有步骤（无Python相关逻辑）
+    check_root
     get_user_config
     install_deps
     install_realm
     install_caddy
-    deploy_rust_realm_web
-    create_rust_systemd
-    security_harden
-    # 部署完成提示
+    deploy_rust
+    create_service
+    firewall_secure
+
     echo -e "\n"
-    green "🎉 Rust版本Realm Web面板+HTTPS代理 部署完成！"
-    green "📢 安全访问地址：https://$DOMAIN"
-    green "🔑 管理员账号：$ADMIN_USER"
-    green "🔐 管理员密码：$ADMIN_PWD"
-    green "✨ 纯Rust实现 | 单二进制无依赖 | 内存安全 | 极致性能 | 零系统限制！"
+    green "🎉 部署全部完成！"
+    green "访问地址：https://$DOMAIN"
+    green "账号：$ADMIN_USER"
+    green "密码：$ADMIN_PWD"
     echo -e "\n"
-    log "===== Rust版本Realm Web部署全流程完成 ====="
+    log "部署完成"
+    read -p "按回车返回主菜单..."
 }
 
-# 执行主函数
-main
+# 卸载面板(保留数据库)
+uninstall_panel() {
+    check_root
+    read -p "⚠️  确定卸载面板？Caddy与Realm会保留，仅删除面板 [y/N]：" confirm
+    [[ $confirm != y && $confirm != Y ]] && { yellow "已取消卸载"; return; }
+
+    systemctl stop realm-web
+    systemctl disable realm-web
+    rm -rf /opt/realm-web
+    rm -f /etc/systemd/system/realm-web.service
+    rm -f /etc/caddy/Caddyfile
+    systemctl daemon-reload
+    green "✅ 面板卸载完成，数据库文件已保留"
+    read -p "按回车返回主菜单..."
+}
+
+# 菜单主循环
+while true; do
+    show_menu
+    case $choice in
+        1)
+            main
+            ;;
+        2)
+            uninstall_panel
+            ;;
+        3)
+            check_root
+            systemctl start realm-web
+            systemctl status realm-web --no-pager
+            read -p "按回车继续..."
+            ;;
+        4)
+            check_root
+            systemctl stop realm-web
+            green "✅ 服务已停止"
+            read -p "按回车继续..."
+            ;;
+        5)
+            check_root
+            systemctl restart realm-web
+            systemctl status realm-web --no-pager
+            read -p "按回车继续..."
+            ;;
+        6)
+            check_root
+            journalctl -u realm-web -f
+            ;;
+        7)
+            check_root
+            journalctl -u caddy -f
+            ;;
+        0)
+            green "👋 退出脚本"
+            exit 0
+            ;;
+        *)
+            red "❌ 输入无效，请输入0-7"
+            read -p "按回车继续..."
+            ;;
+    esac
+done
