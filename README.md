@@ -10,43 +10,36 @@ Rust 版 Realm Web 面板部署步骤，适配 Debian / Ubuntu 系统。
 二、完整部署步骤（按顺序执行）
  
 1. 登录服务器并切换 root
- 
-bash
+
   
 sudo -i
  
  
 2. 下载/上传项目到服务器
  
-方式A（git 克隆，示例地址自行替换）
- 
-bash
-  
-git clone https://github.com/你的用户名/realm-web-deploy.git
+方式A（git 克隆）
+
+git clone https://github.com/HYT-1840/realm-web-deploy.git
+
 cd realm-web-deploy
- 
+
  
 方式B（本地打包上传）
  
 - 本地打包项目目录 → 上传到服务器  /root/realm-web-deploy 
 - 服务器进入目录：
  
-bash
-  
+
 cd /root/realm-web-deploy
  
  
 3. 给部署脚本加执行权限
- 
-bash
   
 chmod +x deploy.sh
  
  
 4. 执行一键部署脚本
- 
-bash
-  
+
 ./deploy.sh
  
  
@@ -78,9 +71,7 @@ bash
 三、访问面板
  
 浏览器打开：
- 
-plaintext
-  
+
 https://你的域名
  
  
@@ -89,32 +80,24 @@ https://你的域名
 四、常用服务管理命令
  
 1. 查看面板状态
- 
-bash
-  
+
 systemctl status realm-web
  
  
 2. 重启/停止/启动
- 
-bash
-  
+
 systemctl restart realm-web
 systemctl stop realm-web
 systemctl start realm-web
  
  
 3. 实时运行日志
- 
-bash
-  
+
 journalctl -u realm-web -f
  
  
 4. Caddy 日志（HTTPS、反向代理）
- 
-bash
-  
+
 journalctl -u caddy -f
  
  
@@ -122,24 +105,18 @@ journalctl -u caddy -f
  
 1. 本地机器安装 Rust 环境
 2. 进入项目  rust/  目录编译 release 版：
- 
-bash
-  
+
 cd rust
 cargo build --release
  
  
 3. 找到编译产物：
- 
-plaintext
   
 rust/target/release/realm-web-rust
  
  
 4. 上传到服务器项目目录下：
- 
-plaintext
-  
+
 /root/realm-web-deploy/rust/realm-web-rust
  
  
@@ -150,15 +127,11 @@ plaintext
 1. 域名打不开
 - 确认域名 A 记录指向服务器公网 IP
 - 安全组/防火墙放通 80、443 端口
+
 2. 服务启动失败
-bash
-  
 journalctl -u realm-web -f
  
 3. 提示缺少 sqlite 相关依赖
- 
-bash
-  
 apt update && apt install -y libsqlite3-dev
  
  
@@ -166,9 +139,6 @@ apt update && apt install -y libsqlite3-dev
 - 正常，脚本做了防火墙限制，只能通过 https 域名访问
  
 七、极简版速记（适合老手）
- 
-bash
-  
 sudo -i
 cd realm-web-deploy
 chmod +x deploy.sh
@@ -176,9 +146,6 @@ chmod +x deploy.sh
 # 填端口、账号、密码、域名
 # 完成 → https://域名 
 VPS本地编译
- 
-bash
-  
 cd rust
 cargo build --release
  
@@ -188,10 +155,7 @@ cargo build --release
 1. externally-managed-environment：本项目无Python依赖，彻底规避该错误
 2. 端口无法访问：脚本已自动加固防火墙，仅允许通过HTTPS 443访问
 3. 服务启动失败：使用 journalctl -u realm-web -f 查看运行日志
- 
-许可证
- 
-MIT./deploy.sh
+
 
 
 realm-web-deploy/
