@@ -90,7 +90,7 @@ install_realm() {
     ARCH=$(uname -m)
     if [[ "$ARCH" == "x86_64" ]]; then
         BIN_URL="https://github.com/zhboner/realm/releases/latest/download/realm-x86_64-unknown-linux-gnu.tar.gz"
-    elif [[ "$ARCH" == "aarch64"` ]]; then
+    elif [[ "$ARCH" == "aarch64" ]]; then
         BIN_URL="https://github.com/zhboner/realm/releases/latest/download/realm-aarch64-unknown-linux-gnu.tar.gz"
     else
         red "❌ 不支持架构$ARCH"
