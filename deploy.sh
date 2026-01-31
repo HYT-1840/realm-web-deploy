@@ -1,6 +1,65 @@
 #!/bin/bash
 set -e
 
+# 交互主菜单
+show_menu() {
+    clear
+    echo "==================== Realm Web Rust 管理脚本 ===================="
+    echo "1. 安装部署面板"
+    echo "2. 卸载面板(保留数据库)"
+    echo "3. 启动面板服务"
+    echo "4. 停止面板服务"
+    echo "5. 重启面板服务"
+    echo "6. 查看实时日志"
+    echo "0. 退出脚本"
+    echo "================================================================"
+    read -p "请输入操作序号[0-6]:" choice
+}
+
+# 菜单循环
+while true; do
+    show_menu
+    case $choice in
+        1)
+            echo "开始安装部署..."
+            main # 直接调用你原脚本的主函数
+            exit 0
+            ;;
+        2)
+            read -p "确定卸载? [y/N] " confirm
+            if [[ $confirm == y || $confirm == Y ]]; then
+                systemctl stop realm-web
+                systemctl disable realm-web
+                rm -rf /opt/realm-web
+                rm -f /etc/systemd/system/realm-web.service
+                rm -f /etc/caddy/Caddyfile
+                systemctl daemon-reload
+                echo "卸载完成(保留数据库realm.db)"
+            fi
+            ;;
+        3)
+            systemctl start realm-web
+            systemctl status realm-web --no-pager
+            ;;
+        4)
+            systemctl stop realm-web
+            ;;
+        5)
+            systemctl restart realm-web
+            ;;
+        6)
+            journalctl -u realm-web -f
+            ;;
+        0)
+            exit 0
+            ;;
+        *)
+            echo "输入无效"
+            ;;
+    esac
+    read -p "按回车继续..."
+done
+
 # 颜色输出函数
 red() { echo -e "\033[31m$1\033[0m"; }
 green() { echo -e "\033[32m$1\033[0m"; }
