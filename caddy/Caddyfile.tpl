@@ -5,7 +5,6 @@
 
     # Caddy自动申请Let's Encrypt SSL证书（自动续期，零操作）
     tls {
-        renew_before 30d
         storage /var/lib/caddy/.local/share/caddy/certificates
     }
 
