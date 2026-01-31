@@ -4,9 +4,8 @@
     reverse_proxy 127.0.0.1:5000
 
     # Caddy自动申请Let's Encrypt SSL证书（自动续期，零操作）
-    tls {
-        storage /var/lib/caddy  # 修复：简化证书存储路径（默认路径，避免目录不存在）
-    }
+    # 注：Caddy v2.10+ 自动使用默认证书存储路径，无需手动配置storage
+    tls
 
     # 优化代理请求头，解决面板真实IP、跨域问题
     header {
