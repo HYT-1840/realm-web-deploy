@@ -104,6 +104,8 @@ install_caddy() {
     # 生成Caddy配置
     mkdir -p /etc/caddy
     sed "s/{{DOMAIN}}/$DOMAIN/g" caddy/Caddyfile.tpl > /etc/caddy/Caddyfile
+    # 自动清理废弃指令，兼容Caddy 2.10+
+    sed -i -e '/renew_before/d' -e '/storage/d' /etc/caddy/Caddyfile
     caddy validate --config /etc/caddy/Caddyfile &>/dev/null || { red "❌ Caddy配置错误"; exit 1; }
     green "✅ Caddy配置文件生成成功！"
     log "Caddy配置文件生成：/etc/caddy/Caddyfile，域名：$DOMAIN"
@@ -111,7 +113,7 @@ install_caddy() {
     # 启动Caddy并设置开机自启
     systemctl start caddy
     systemctl enable caddy
-    sleep 3 # 等待Caddy完成证书申请
+    sleep 3
     if systemctl is-active --quiet caddy; then
         green "✅ Caddy服务启动成功（已自动申请SSL证书）"
         log "Caddy服务启动成功，开机自启已开启"
